@@ -1,5 +1,6 @@
 """WSGI-приложение для PythonAnywhere: принимает вебхук Telegram и обрабатывает обновление."""
 import asyncio
+import hmac
 import logging
 import os
 import threading
@@ -34,6 +35,16 @@ def webhook():
             asyncio.run(_handle(request.get_json(force=True)))
     except Exception:  # отвечаем 200 в любом случае, иначе Telegram будет присылать то же обновление снова
         log.exception("ошибка обработки обновления")
+    return "ok"
+
+
+@application.get("/prompts/<key>")
+def prompts(key: str):
+    """Утренняя рассылка: на бесплатном PythonAnywhere нет планировщика, адрес дёргает внешний cron."""
+    if not hmac.compare_digest(key, os.getenv("WEBHOOK_SECRET", "")):
+        abort(403)
+    with _lock:
+        asyncio.run(bot._prompts())
     return "ok"
 
 

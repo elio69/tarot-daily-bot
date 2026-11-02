@@ -38,9 +38,10 @@ from pa_wsgi import application
 ```
    Нажмите **Reload**.
 4. В консоли: `python3 bot.py --set-webhook https://ИМЯ.pythonanywhere.com/webhook`
-5. Вкладка **Tasks** → Daily, время `05:00` (UTC = 08:00 МСК), команда:
-   `python3 /home/ИМЯ/tarot-daily-bot/bot.py --prompts`
-6. Раз в 3 месяца на вкладке Web нажимайте **Run until 3 months from today**, иначе бесплатное приложение отключится.
+5. Планировщик PythonAnywhere на бесплатном тарифе недоступен, поэтому утреннюю рассылку запускает внешний cron
+   (например, бесплатный cron-job.org): раз в день в 08:00 (Europe/Moscow) GET-запрос на
+   `https://ИМЯ.pythonanywhere.com/prompts/<WEBHOOK_SECRET из .env>`.
+6. Раз в месяц на вкладке Web нажимайте **Run until 1 month from today**, иначе бесплатное приложение отключится.
 
 Обновить код: `cd ~/tarot-daily-bot && git pull`, затем Reload на вкладке Web.
 Данные пользователей лежат в `data/store.json` на сервере (в git не попадают).
