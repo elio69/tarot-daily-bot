@@ -20,16 +20,27 @@ python bot.py
 
 Проверка без Telegram: `python bot.py --test-spread --seed 1`.
 
-## Деплой
-**systemd (VPS):** скопируйте проект в `/opt/tarot-bot`, создайте venv, затем
+## Деплой на PythonAnywhere (бесплатно, без карты)
+Бот работает по вебхуку: Telegram сам присылает сообщения на `https://ИМЯ.pythonanywhere.com/webhook`, ответ мгновенный.
+
+1. Зарегистрируйтесь на pythonanywhere.com (аккаунт Beginner, бесплатный).
+2. Консоль **Bash**:
 ```bash
-sudo cp deploy/tarot-bot.service /etc/systemd/system/
-sudo systemctl enable --now tarot-bot
+git clone https://github.com/elio69/tarot-daily-bot.git && cd tarot-daily-bot && bash pa_setup.sh
 ```
-**Docker:**
-```bash
-docker build -t tarot-bot .
-docker run -d --restart unless-stopped --env-file .env -v tarot-data:/app/data tarot-bot
+Скрипт спросит токен (ввод скрыт) и создаст `.env`.
+3. Вкладка **Web** → Add a new web app → **Manual configuration** → Python 3.12 (или новее).
+   В «Code → WSGI configuration file» замените всё содержимое на:
+```python
+import sys
+sys.path.insert(0, "/home/ИМЯ/tarot-daily-bot")
+from pa_wsgi import application
 ```
-Состояние (`state.json`, `history.json`) лежит в `data/` — это и есть том.
-Картинки в образ попадают из `data/cards/` (скачайте их до сборки).
+   Нажмите **Reload**.
+4. В консоли: `python3 bot.py --set-webhook https://ИМЯ.pythonanywhere.com/webhook`
+5. Вкладка **Tasks** → Daily, время `05:00` (UTC = 08:00 МСК), команда:
+   `python3 /home/ИМЯ/tarot-daily-bot/bot.py --prompts`
+6. Раз в 3 месяца на вкладке Web нажимайте **Run until 3 months from today**, иначе бесплатное приложение отключится.
+
+Обновить код: `cd ~/tarot-daily-bot && git pull`, затем Reload на вкладке Web.
+Данные пользователей лежат в `data/store.json` на сервере (в git не попадают).
