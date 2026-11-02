@@ -1,0 +1,15 @@
+[Unit]
+Description=Tarot daily Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tarot
+WorkingDirectory=/opt/tarot-bot
+ExecStart=/opt/tarot-bot/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
