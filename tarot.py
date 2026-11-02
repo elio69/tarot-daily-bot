@@ -1,4 +1,4 @@
-"""Логика расклада: выбор карт, хранение истории, форматирование сообщений."""
+"""Логика расклада: выбор карт, хранилище пользователей, форматирование сообщений."""
 from __future__ import annotations
 
 import json
@@ -12,31 +12,61 @@ from zoneinfo import ZoneInfo
 BASE = Path(__file__).parent
 DATA = BASE / "data"
 CARDS_DIR = DATA / "cards"
+STORE_ENC = DATA / "store.enc"    # зашифровано ключом STATE_KEY (так хранится в публичном репозитории)
+STORE_PLAIN = DATA / "store.json"  # локальная разработка без ключа, в git не попадает
 TZ = ZoneInfo("Europe/Moscow")
 POSITIONS = ["Энергия дня", "На что обратить внимание", "Что ждёт"]
 MEANING_KEYS = ["meaning_day", "meaning_attention", "meaning_ahead"]
 
 Card = dict
 Spread = list[dict]  # [{"id": ..., "position": ...}]
+# store = {"offset": int|None, "users": {uid: {"name", "state": "ask_name"|"ready", "last_prompt"}},
+#          "history": {uid: {day: Spread}}}; uid — chat_id строкой (ключи JSON)
 
 
 def today() -> str:
     return datetime.now(TZ).date().isoformat()
 
 
-def read_json(name: str, default):
-    try:
-        return json.loads((DATA / name).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return default
+def _fernet():
+    key = os.getenv("STATE_KEY")
+    if not key:
+        return None
+    from cryptography.fernet import Fernet
+    return Fernet(key)
 
 
-def write_json(name: str, obj) -> None:
-    # запись через временный файл, чтобы падение посреди записи не портило данные
-    path = DATA / name
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
+def load_store() -> dict:
+    f = _fernet()
+    path = STORE_ENC if f else STORE_PLAIN
+    if path.exists():
+        raw = path.read_bytes()
+        return json.loads((f.decrypt(raw) if f else raw).decode("utf-8"))
+    return _from_legacy()
+
+
+def save_store(store: dict) -> None:
+    f = _fernet()
+    path = STORE_ENC if f else STORE_PLAIN
+    raw = json.dumps(store, ensure_ascii=False).encode("utf-8")
+    tmp = path.with_suffix(".tmp")  # запись через временный файл, чтобы сбой не портил данные
+    tmp.write_bytes(f.encrypt(raw) if f else raw)
     os.replace(tmp, path)
+
+
+def _from_legacy() -> dict:
+    """Первый запуск: переносим единственного прежнего пользователя (state.json/history.json), если они есть."""
+    store: dict = {"offset": None, "users": {}, "history": {}}
+    try:
+        old = json.loads((DATA / "state.json").read_text(encoding="utf-8"))
+        uid = str(old["chat_id"])
+        store["offset"] = old.get("offset")
+        store["users"][uid] = {"name": "Илюша", "state": "ready", "last_prompt": old.get("last_prompt")}
+        hist = DATA / "history.json"
+        store["history"][uid] = json.loads(hist.read_text(encoding="utf-8")) if hist.exists() else {}
+    except FileNotFoundError:
+        pass
+    return store
 
 
 @lru_cache(maxsize=1)
@@ -54,13 +84,12 @@ def draw(rng: random.Random) -> Spread:
     return [{"id": cid, "position": pos} for cid, pos in zip([first, *rest], POSITIONS)]
 
 
-def get_spread(day: str, rng: random.Random | None = None) -> Spread:
-    """Расклад дня: возвращает сохранённый или тянет новый и сохраняет."""
-    history = read_json("history.json", {})
-    if day not in history:
-        history[day] = draw(rng or random.Random())
-        write_json("history.json", history)
-    return history[day]
+def get_spread(store: dict, uid: str, day: str, rng: random.Random | None = None) -> Spread:
+    """Расклад дня пользователя: возвращает сохранённый или тянет новый (вызывающий сохраняет store)."""
+    days = store["history"].setdefault(uid, {})
+    if day not in days:
+        days[day] = draw(rng or random.Random())
+    return days[day]
 
 
 def image_path(card_id: str) -> Path:
@@ -91,8 +120,8 @@ def caption(spread_item: dict) -> str:
     return f"{spread_item['position']}: {name}" if spread_item["position"] else name
 
 
-def format_history(days: int = 7) -> str:
-    history = read_json("history.json", {})
+def format_history(store: dict, uid: str, days: int = 7) -> str:
+    history = store["history"].get(uid, {})
     keys = sorted(history, reverse=True)[:days]
     if not keys:
         return "История пока пуста."

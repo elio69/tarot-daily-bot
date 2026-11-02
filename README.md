@@ -5,7 +5,8 @@
 
 ## Токен
 1. В Telegram откройте @BotFather → `/newbot` → получите токен.
-2. `cp .env.example .env` и впишите токен в `BOT_TOKEN=` (в чат токен не отправляйте).
+2. `cp .env.example .env` и впишите токен в `BOT_TOKEN=`, а в `STATE_KEY=` — ключ шифрования (команда в `.env.example`).
+   Те же два значения добавьте как секреты репозитория (Settings → Secrets and variables → Actions): `BOT_TOKEN` и `STATE_KEY`.
 
 ## Локальный запуск
 ```bash
@@ -14,7 +15,8 @@ pip install -r requirements.txt
 python scripts/fetch_cards.py                   # картинки в data/cards/
 python bot.py
 ```
-Затем напишите боту `/start` — он привяжется к первому написавшему. Команды: `/spread`, `/history`.
+Затем напишите боту `/start`: он спросит, как вас называть, и будет обращаться по имени. Бот открыт для всех — ссылку можно слать друзьям. Команды: `/spread`, `/history`, `/name`.
+Данные пользователей лежат в `data/store.enc` (шифруется `STATE_KEY`; без ключа — `data/store.json` локально).
 
 Проверка без Telegram: `python bot.py --test-spread --seed 1`.
 

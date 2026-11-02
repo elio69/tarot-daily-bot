@@ -1,3 +1,6 @@
 .env
 __pycache__/
 _parts/
+data/store.json
+data/state.json
+data/history.json
