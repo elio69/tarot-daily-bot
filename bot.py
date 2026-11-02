@@ -43,7 +43,9 @@ async def send_spread(bot, store: dict, chat_id: int) -> None:
 
 
 async def ask_name(update, store: dict) -> None:
-    store["users"][str(update.effective_chat.id)] = {"name": None, "state": "ask_name", "last_prompt": None}
+    old = _user(store, update) or {}
+    store["users"][str(update.effective_chat.id)] = {
+        "name": None, "state": "ask_name", "last_prompt": old.get("last_prompt")}  # смена имени не повторяет приглашение
     tarot.save_store(store)
     await update.message.reply_text("Привет! Как я могу тебя называть?")
 
