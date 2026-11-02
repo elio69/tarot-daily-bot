@@ -12,6 +12,7 @@ import tarot
 
 log = logging.getLogger("tarot-bot")
 SPREAD_BTN = "spread"
+INTRO_BTN = "intro"
 MAX_NAME = 40
 
 
@@ -42,12 +43,19 @@ async def send_spread(bot, store: dict, chat_id: int) -> None:
     await bot.send_message(chat_id, tarot.format_text(spread))
 
 
-async def ask_name(update, store: dict) -> None:
-    old = _user(store, update) or {}
-    store["users"][str(update.effective_chat.id)] = {
+async def ask_name(bot, store: dict, chat_id: int) -> None:
+    old = store["users"].get(str(chat_id)) or {}
+    store["users"][str(chat_id)] = {
         "name": None, "state": "ask_name", "last_prompt": old.get("last_prompt")}  # смена имени не повторяет приглашение
     tarot.save_store(store)
-    await update.message.reply_text("Привет! Как я могу тебя называть?")
+    await bot.send_message(chat_id, "Привет! Как я могу тебя называть?")
+
+
+async def welcome(update) -> None:
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Познакомиться", callback_data=INTRO_BTN)]])
+    await update.message.reply_text(
+        "Привет! Я каждое утро присылаю расклад Таро на день. Давай познакомимся.", reply_markup=kb)
 
 
 async def cmd_start(update, context) -> None:
@@ -58,18 +66,23 @@ async def cmd_start(update, context) -> None:
             f"Привет, {user['name']}! Каждое утро в 08:00 (МСК) я предложу расклад дня. "
             "Сделать его сейчас можно командой /spread, сменить имя — /name.")
     else:
-        await ask_name(update, store)
+        await welcome(update)
 
 
 async def cmd_name(update, context) -> None:
-    await ask_name(update, tarot.load_store())
+    await ask_name(context.bot, tarot.load_store(), update.effective_chat.id)
+
+
+async def on_intro(update, context) -> None:
+    await _answer(update.callback_query)
+    await ask_name(context.bot, tarot.load_store(), update.effective_chat.id)
 
 
 async def on_text(update, context) -> None:
     store = tarot.load_store()
     user = _user(store, update)
     if user is None:
-        await ask_name(update, store)
+        await welcome(update)
         return
     if user["state"] != "ask_name":
         await update.message.reply_text("Я понимаю команды: /spread — расклад дня, /history — последние дни, /name — сменить имя.")
@@ -87,10 +100,13 @@ async def on_text(update, context) -> None:
 
 async def _ready_user(update, store: dict) -> dict | None:
     user = _user(store, update)
-    if user is None or user["state"] != "ready":
-        await ask_name(update, store)
-        return None
-    return user
+    if user is None:
+        await welcome(update)
+    elif user["state"] != "ready":
+        await update.message.reply_text("Сначала скажи, как тебя называть — просто напиши имя.")
+    else:
+        return user
+    return None
 
 
 async def cmd_spread(update, context) -> None:
@@ -105,12 +121,15 @@ async def cmd_history(update, context) -> None:
         await update.message.reply_text(tarot.format_history(store, str(update.effective_chat.id)))
 
 
-async def on_button(update, context) -> None:
-    query = update.callback_query
+async def _answer(query) -> None:
     try:
         await query.answer()
-    except Exception:  # при запуске по расписанию кнопка может быть «просрочена» — расклад всё равно отправляем
+    except Exception:  # при запуске по расписанию кнопка может быть «просрочена» — действие всё равно выполняем
         log.warning("callback answer failed", exc_info=True)
+
+
+async def on_button(update, context) -> None:
+    await _answer(update.callback_query)
     store = tarot.load_store()
     user = _user(store, update)
     if user and user["state"] == "ready":
@@ -158,6 +177,7 @@ def build_app():
     app.add_handler(CommandHandler("spread", cmd_spread))
     app.add_handler(CommandHandler("history", cmd_history))
     app.add_handler(CallbackQueryHandler(on_button, pattern=f"^{SPREAD_BTN}$"))
+    app.add_handler(CallbackQueryHandler(on_intro, pattern=f"^{INTRO_BTN}$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(on_error)
     return app
