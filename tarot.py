@@ -33,7 +33,8 @@ def _fernet():
     if not key:
         return None
     from cryptography.fernet import Fernet
-    return Fernet(key)
+    key = key.strip()
+    return Fernet(key + "=" * (-len(key) % 4))  # допускаем ключ без хвостового «=» (теряется при копировании)
 
 
 def load_store() -> dict:
