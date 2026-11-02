@@ -51,11 +51,16 @@ async def ask_name(bot, store: dict, chat_id: int) -> None:
     await bot.send_message(chat_id, "Привет! Как я могу тебя называть?")
 
 
+def spread_markup():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Сделать расклад", callback_data=SPREAD_BTN)]])
+
+
 async def welcome(update) -> None:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Познакомиться", callback_data=INTRO_BTN)]])
     await update.message.reply_text(
-        "Привет! Я каждое утро присылаю расклад Таро на день. Давай познакомимся.", reply_markup=kb)
+        "Привет! Я делаю расклад Таро на день. Давай познакомимся.", reply_markup=kb)
 
 
 async def cmd_start(update, context) -> None:
@@ -63,8 +68,8 @@ async def cmd_start(update, context) -> None:
     user = _user(store, update)
     if user and user["state"] == "ready":
         await update.message.reply_text(
-            f"Привет, {user['name']}! Каждое утро в 08:00 (МСК) я предложу расклад дня. "
-            "Сделать его сейчас можно командой /spread, сменить имя — /name.")
+            f"Привет, {user['name']}! Раз в день можно нажать кнопку ниже — и я сделаю расклад на сегодня. "
+            "Сменить имя — /name.", reply_markup=spread_markup())
     else:
         await welcome(update)
 
@@ -85,7 +90,9 @@ async def on_text(update, context) -> None:
         await welcome(update)
         return
     if user["state"] != "ask_name":
-        await update.message.reply_text("Я понимаю команды: /spread — расклад дня, /history — последние дни, /name — сменить имя.")
+        await update.message.reply_text(
+            "Нажми кнопку — сделаю расклад дня. Ещё: /history — последние дни, /name — сменить имя.",
+            reply_markup=spread_markup())
         return
     name = " ".join(update.message.text.split())
     if not name or len(name) > MAX_NAME:
@@ -94,8 +101,8 @@ async def on_text(update, context) -> None:
     user.update(name=name, state="ready")
     tarot.save_store(store)
     await update.message.reply_text(
-        f"Приятно познакомиться, {name}! Каждое утро в 08:00 (МСК) я буду спрашивать, "
-        "не сделать ли расклад дня. Хочешь прямо сейчас — /spread.")
+        f"Приятно познакомиться, {name}! Раз в день можно нажать кнопку ниже — "
+        "и я сделаю расклад на сегодня.", reply_markup=spread_markup())
 
 
 async def _ready_user(update, store: dict) -> dict | None:
